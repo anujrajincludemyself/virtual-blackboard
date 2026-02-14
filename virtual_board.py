@@ -3,11 +3,12 @@ import numpy as np
 import mediapipe as mp
 import os
 import math
+import time
 from shapes_3d import Cube, Sphere, Pyramid, Cylinder
 
 # Initialize MediaPipe Hands
 mpHands = mp.solutions.hands
-hands = mpHands.Hands(max_num_hands=1, min_detection_confidence=0.7)
+hands = mpHands.Hands(max_num_hands=2, min_detection_confidence=0.7)
 mpDraw = mp.solutions.drawing_utils
 
 # Initialize Camera
@@ -38,6 +39,11 @@ current_shape = None
 placed_shapes = []  # List of (shape_object, color) tuples
 shape_size = 100
 shape_rotation_speed = 0.05
+
+# Overlay screen variables
+show_thanks_screen = False
+thanks_screen_start = 0
+OVERLAY_DURATION = 3  # seconds to show overlay
 
 def calculate_distance(p1, p2):
     """Calculate Euclidean distance between two points"""
@@ -80,6 +86,27 @@ def create_shape(shape_type, position, size):
         return Cylinder(position, size)
     return None
 
+def draw_overlay_screen(img, text_lines, bg_color=(0, 0, 0), text_color=(255, 255, 255)):
+    """Draw a full-screen overlay with centered text"""
+    h, w, _ = img.shape
+    overlay = img.copy()
+    # Semi-transparent dark background
+    cv2.rectangle(overlay, (0, 0), (w, h), bg_color, cv2.FILLED)
+    img = cv2.addWeighted(overlay, 0.85, img, 0.15, 0)
+    
+    total_lines = len(text_lines)
+    for i, (text, scale, thickness) in enumerate(text_lines):
+        text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, thickness)[0]
+        text_x = (w - text_size[0]) // 2
+        text_y = (h // 2) + (i - total_lines // 2) * (text_size[1] + 40)
+        # Shadow
+        cv2.putText(img, text, (text_x + 3, text_y + 3),
+                    cv2.FONT_HERSHEY_SIMPLEX, scale, (50, 50, 50), thickness + 2)
+        # Main text
+        cv2.putText(img, text, (text_x, text_y),
+                    cv2.FONT_HERSHEY_SIMPLEX, scale, text_color, thickness)
+    return img
+
 print("Starting Virtual Board...")
 print("Commands:")
 print(" - Index Finger Up: Draw")
@@ -87,8 +114,9 @@ print(" - Two Fingers Up (Index + Middle): Selection/Hover (Not drawing)")
 print(" - Three Fingers Up (Index + Middle + Ring): Shape Mode")
 print(" - Pinch (Thumb + Index): Resize shape in Shape Mode")
 print(" - Hand Tilt: Rotate shape in Shape Mode")
-print(" - Fist (All fingers down): Place shape on canvas")
+print(" - Fist (All fingers down): Place shape / Show 'From Anuj and Sachin Kumar Jha'")
 print(" - Full Hand Open: Eraser (Clears Board)")
+print(" - Both Hands Open: Show 'Thanks Mam' screen")
 print(" - 'q' to Quit")
 
 while True:
@@ -112,14 +140,31 @@ while True:
         results = hands.process(imgRGB)
         
         lmList = []
+        all_hands_landmarks = []  # Store landmarks for each hand separately
         
         if results.multi_hand_landmarks:
             for handLms in results.multi_hand_landmarks:
                 mpDraw.draw_landmarks(img, handLms, mpHands.HAND_CONNECTIONS)
                 
+                hand_lm = []
                 for id, lm in enumerate(handLms.landmark):
                     cx, cy = int(lm.x * w), int(lm.y * h)
-                    lmList.append([cx, cy])
+                    hand_lm.append([cx, cy])
+                all_hands_landmarks.append(hand_lm)
+            
+            # Use the first hand's landmarks for main controls
+            if len(all_hands_landmarks) > 0:
+                lmList = all_hands_landmarks[0]
+            
+            # Check for two hands both open -> "Thanks Mam" screen
+            if len(all_hands_landmarks) == 2:
+                fingers_hand1 = fingersUp(all_hands_landmarks[0])
+                fingers_hand2 = fingersUp(all_hands_landmarks[1])
+                if all(f == 1 for f in fingers_hand1) and all(f == 1 for f in fingers_hand2):
+                    if not show_thanks_screen:
+                        show_thanks_screen = True
+                        thanks_screen_start = time.time()
+                        print("Both hands detected - Thanks Mam!")
 
         # 3. Process Landmarks if hand detected
         if len(lmList) != 0:
@@ -279,6 +324,18 @@ while True:
         imgInv = cv2.cvtColor(imgInv, cv2.COLOR_GRAY2BGR)
         img = cv2.bitwise_and(img, imgInv)
         img = cv2.bitwise_or(img, canvas)
+
+        # Draw overlay screens if active
+        current_time = time.time()
+        
+        if show_thanks_screen:
+            if current_time - thanks_screen_start < OVERLAY_DURATION:
+                img = draw_overlay_screen(img, [
+                    ("THANKS MAM", 3, 8),
+                    ("From Anuj & Sachin Kumar Jha", 1.5, 4)
+                ], bg_color=(20, 80, 20), text_color=(100, 255, 100))
+            else:
+                show_thanks_screen = False
 
         # Show Image
         cv2.imshow("Virtual Board", img)
