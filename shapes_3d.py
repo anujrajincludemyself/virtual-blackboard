@@ -158,33 +158,3 @@ class Pyramid(Shape3D):
             (1, 2), (2, 3), (3, 4), (4, 1)   # Base edges
         ]
 
-
-class Cylinder(Shape3D):
-    """3D Cylinder shape"""
-    
-    def __init__(self, position=(0, 0, 0), size=100, segments=16):
-        super().__init__(position, size)
-        self.segments = segments
-        
-        # Create vertices for top and bottom circles
-        self.vertices = []
-        self.edges = []
-        
-        for i in range(segments):
-            angle = (i / segments) * 2 * np.pi
-            x = 0.5 * np.cos(angle)
-            z = 0.5 * np.sin(angle)
-            
-            # Top circle
-            self.vertices.append(np.array([x, -0.5, z]))
-            # Bottom circle
-            self.vertices.append(np.array([x, 0.5, z]))
-        
-        # Create edges
-        for i in range(segments):
-            # Top circle edges
-            self.edges.append((i * 2, ((i + 1) % segments) * 2))
-            # Bottom circle edges
-            self.edges.append((i * 2 + 1, ((i + 1) % segments) * 2 + 1))
-            # Vertical connecting edges
-            self.edges.append((i * 2, i * 2 + 1))
